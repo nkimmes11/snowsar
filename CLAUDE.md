@@ -8,7 +8,7 @@ SnowSAR is an open-source (Apache 2.0) Python web application that retrieves sno
 
 ## Build and Development
 
-This project uses **uv** for Python package management (Python 3.14+, see `.python-version`).
+This project uses **uv** for Python package management (Python 3.12+, see `.python-version`).
 
 ```bash
 uv sync                  # Install dependencies
@@ -43,6 +43,12 @@ Three-tier design: browser frontend (React or Vue + Leaflet), Python backend (Fa
 ## CI/CD
 
 GitHub Actions: ruff (lint) + mypy (types) + pytest (tests) on every push/PR. Integration tests, Docker builds, and docs on merge to main. PyPI publish on tagged releases.
+
+## Workflow Requirements
+
+- **Commit after every step:** Push a git commit to the GitHub repository after completing each implementation step.
+- **Verify CI passes:** After every push, check that all GitHub Actions CI runs (lint, typecheck, test) have passed. If any fail, fix the issues before proceeding to the next step.
+- **Run locally before pushing:** Always run `uv run ruff check .`, `uv run ruff format --check .`, and `uv run pytest` locally before committing.
 
 ## Branch Strategy
 

@@ -12,6 +12,7 @@ wheels/
 
 # LLM
 .llm/
+.claude/
 
 # Testing
 .coverage

@@ -56,12 +56,13 @@ def validate_dataset(ds: xr.Dataset, required: frozenset[str] | None = None) -> 
 
 def db_to_linear(db_values: xr.DataArray) -> xr.DataArray:
     """Convert decibel values to linear power scale."""
-    return 10.0 ** (db_values / 10.0)
+    result: xr.DataArray = 10.0 ** (db_values / 10.0)
+    return result
 
 
 def linear_to_db(linear_values: xr.DataArray) -> xr.DataArray:
     """Convert linear power values to decibels."""
-    return 10.0 * np.log10(linear_values)
+    return xr.DataArray(10.0 * np.log10(linear_values))
 
 
 def write_geotiff(ds: xr.Dataset, variable: str, path: Path) -> None:

@@ -79,6 +79,7 @@ module = [
     "asf_search.*",
     "ee.*",
     "geopandas.*",
+    "pandas.*",
     "dataretrieval.*",
     "plotly.*",
     "matplotlib.*",

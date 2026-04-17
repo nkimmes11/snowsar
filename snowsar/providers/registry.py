@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from snowsar.exceptions import SnowSARError
 from snowsar.types import Backend
@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from snowsar.providers.base import DataProvider
 
 
-def get_provider(backend: Backend, **kwargs: object) -> DataProvider:
+def get_provider(backend: Backend, **kwargs: Any) -> DataProvider:
     """Create a DataProvider instance for the given backend.
 
     Args:
