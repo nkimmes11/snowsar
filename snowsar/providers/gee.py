@@ -51,9 +51,7 @@ class GEEProvider:
     def __init__(self, project: str | None = None, **_kwargs: object) -> None:
         self._ee = _initialize_ee(project)
 
-    def query_scenes(
-        self, aoi: AOI, temporal_range: TemporalRange
-    ) -> list[SceneMetadata]:
+    def query_scenes(self, aoi: AOI, temporal_range: TemporalRange) -> list[SceneMetadata]:
         """Discover Sentinel-1 IW GRD scenes via GEE."""
         ee = self._ee
         bounds = aoi.bounds
@@ -91,9 +89,7 @@ class GEEProvider:
             )
         return scenes
 
-    def load_sar(
-        self, aoi: AOI, temporal_range: TemporalRange
-    ) -> xr.Dataset:
+    def load_sar(self, aoi: AOI, temporal_range: TemporalRange) -> xr.Dataset:
         """Load Sentinel-1 gamma0 VV/VH from GEE."""
         ee = self._ee
         bounds = aoi.bounds
@@ -131,9 +127,7 @@ class GEEProvider:
         for i in range(count):
             img = ee.Image(image_list.get(i))
             props = img.getInfo()["properties"]
-            acq_date = date.fromisoformat(
-                props.get("system:time_start", "1970-01-01")[:10]
-            )
+            acq_date = date.fromisoformat(props.get("system:time_start", "1970-01-01")[:10])
             times.append(acq_date)
 
             # Sample at ~100m resolution
@@ -168,9 +162,7 @@ class GEEProvider:
         )
         return ds
 
-    def load_ancillary(
-        self, aoi: AOI, temporal_range: TemporalRange
-    ) -> xr.Dataset:
+    def load_ancillary(self, aoi: AOI, temporal_range: TemporalRange) -> xr.Dataset:
         """Load DEM, forest cover, and snow cover from GEE collections."""
         ee = self._ee
         bounds = aoi.bounds
@@ -181,9 +173,11 @@ class GEEProvider:
         terrain = ee.Terrain.products(dem)
 
         dem_data = dem.sampleRectangle(region=roi, defaultValue=0).getInfo()
-        terrain_data = terrain.select(["slope", "aspect"]).sampleRectangle(
-            region=roi, defaultValue=0
-        ).getInfo()
+        terrain_data = (
+            terrain.select(["slope", "aspect"])
+            .sampleRectangle(region=roi, defaultValue=0)
+            .getInfo()
+        )
 
         elevation = np.array(dem_data["properties"]["DEM"], dtype=np.float32)
         slope = np.array(terrain_data["properties"]["slope"], dtype=np.float32)
@@ -214,9 +208,7 @@ class GEEProvider:
         )
         return ds
 
-    def load_full(
-        self, aoi: AOI, temporal_range: TemporalRange
-    ) -> xr.Dataset:
+    def load_full(self, aoi: AOI, temporal_range: TemporalRange) -> xr.Dataset:
         """Load SAR + ancillary data merged into a single Dataset."""
         sar = self.load_sar(aoi, temporal_range)
         ancillary = self.load_ancillary(aoi, temporal_range)

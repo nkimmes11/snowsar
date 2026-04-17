@@ -36,35 +36,27 @@ class TestLievensAlgorithm:
         with pytest.raises(ValueError, match="missing required variables"):
             algo.validate_input(ds)
 
-    def test_run_returns_required_outputs(
-        self, synthetic_sar_dataset: xr.Dataset
-    ) -> None:
+    def test_run_returns_required_outputs(self, synthetic_sar_dataset: xr.Dataset) -> None:
         algo = LievensAlgorithm()
         result = algo.run(synthetic_sar_dataset)
         assert "snow_depth" in result
         assert "quality_flag" in result
         assert "uncertainty" in result
 
-    def test_run_output_dimensions_match_input(
-        self, synthetic_sar_dataset: xr.Dataset
-    ) -> None:
+    def test_run_output_dimensions_match_input(self, synthetic_sar_dataset: xr.Dataset) -> None:
         algo = LievensAlgorithm()
         result = algo.run(synthetic_sar_dataset)
         assert set(result["snow_depth"].dims) == set(synthetic_sar_dataset["gamma0_vv"].dims)
         for dim in synthetic_sar_dataset["gamma0_vv"].dims:
             assert result["snow_depth"].sizes[dim] == synthetic_sar_dataset["gamma0_vv"].sizes[dim]
 
-    def test_run_snow_depth_non_negative(
-        self, synthetic_sar_dataset: xr.Dataset
-    ) -> None:
+    def test_run_snow_depth_non_negative(self, synthetic_sar_dataset: xr.Dataset) -> None:
         algo = LievensAlgorithm()
         result = algo.run(synthetic_sar_dataset)
         valid = result["snow_depth"].values[~np.isnan(result["snow_depth"].values)]
         assert (valid >= 0).all()
 
-    def test_run_with_custom_params(
-        self, synthetic_sar_dataset: xr.Dataset
-    ) -> None:
+    def test_run_with_custom_params(self, synthetic_sar_dataset: xr.Dataset) -> None:
         algo = LievensAlgorithm()
         result = algo.run(
             synthetic_sar_dataset,
@@ -72,9 +64,7 @@ class TestLievensAlgorithm:
         )
         assert "snow_depth" in result
 
-    def test_run_preserves_attributes(
-        self, synthetic_sar_dataset: xr.Dataset
-    ) -> None:
+    def test_run_preserves_attributes(self, synthetic_sar_dataset: xr.Dataset) -> None:
         algo = LievensAlgorithm()
         result = algo.run(synthetic_sar_dataset)
         assert result.attrs["algorithm"] == "lievens"
@@ -97,9 +87,7 @@ class TestCrossPolarizationRatio:
 
 
 class TestReferenceBackscatter:
-    def test_default_uses_first_timestep(
-        self, synthetic_sar_dataset: xr.Dataset
-    ) -> None:
+    def test_default_uses_first_timestep(self, synthetic_sar_dataset: xr.Dataset) -> None:
         cr = compute_cross_pol_ratio(
             synthetic_sar_dataset["gamma0_vh"],
             synthetic_sar_dataset["gamma0_vv"],
@@ -184,19 +172,23 @@ class TestScaleToSnowDepth:
 
 class TestQualityFlags:
     def test_all_valid(self) -> None:
-        ds = xr.Dataset({
-            "snow_cover": xr.DataArray([1, 1]),
-            "forest_cover_fraction": xr.DataArray([0.1, 0.2]),
-        })
+        ds = xr.Dataset(
+            {
+                "snow_cover": xr.DataArray([1, 1]),
+                "forest_cover_fraction": xr.DataArray([0.1, 0.2]),
+            }
+        )
         sd = xr.DataArray([1.0, 2.0])
         flags = generate_quality_flags(ds, sd, fcf_threshold=0.5)
         assert (flags.values == QualityFlag.VALID).all()
 
     def test_high_forest_flagged(self) -> None:
-        ds = xr.Dataset({
-            "snow_cover": xr.DataArray([1]),
-            "forest_cover_fraction": xr.DataArray([0.8]),
-        })
+        ds = xr.Dataset(
+            {
+                "snow_cover": xr.DataArray([1]),
+                "forest_cover_fraction": xr.DataArray([0.8]),
+            }
+        )
         sd = xr.DataArray([1.0])
         flags = generate_quality_flags(ds, sd, fcf_threshold=0.5)
         assert int(flags.values[0]) == QualityFlag.HIGH_FOREST

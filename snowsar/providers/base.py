@@ -30,33 +30,25 @@ class DataProvider(Protocol):
     Attributes: crs, orbit_number, scene_ids, platform
     """
 
-    def query_scenes(
-        self, aoi: AOI, temporal_range: TemporalRange
-    ) -> list[SceneMetadata]:
+    def query_scenes(self, aoi: AOI, temporal_range: TemporalRange) -> list[SceneMetadata]:
         """Discover available SAR scenes overlapping the AOI and date range."""
         ...
 
-    def load_sar(
-        self, aoi: AOI, temporal_range: TemporalRange
-    ) -> xr.Dataset:
+    def load_sar(self, aoi: AOI, temporal_range: TemporalRange) -> xr.Dataset:
         """Load preprocessed SAR backscatter as a standardized Dataset.
 
         Variables: gamma0_vv, gamma0_vh, incidence_angle.
         """
         ...
 
-    def load_ancillary(
-        self, aoi: AOI, temporal_range: TemporalRange
-    ) -> xr.Dataset:
+    def load_ancillary(self, aoi: AOI, temporal_range: TemporalRange) -> xr.Dataset:
         """Load ancillary data: DEM derivatives, forest cover, snow cover.
 
         Variables: elevation, slope, aspect, forest_cover_fraction, snow_cover.
         """
         ...
 
-    def load_full(
-        self, aoi: AOI, temporal_range: TemporalRange
-    ) -> xr.Dataset:
+    def load_full(self, aoi: AOI, temporal_range: TemporalRange) -> xr.Dataset:
         """Load SAR + ancillary data merged into a single Dataset.
 
         Convenience method combining load_sar() and load_ancillary().

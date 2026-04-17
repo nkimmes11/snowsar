@@ -40,9 +40,7 @@ class ASFProvider:
         self._username = earthdata_username or settings.earthdata_username
         self._password = earthdata_password or settings.earthdata_password
 
-    def query_scenes(
-        self, aoi: AOI, temporal_range: TemporalRange
-    ) -> list[SceneMetadata]:
+    def query_scenes(self, aoi: AOI, temporal_range: TemporalRange) -> list[SceneMetadata]:
         """Discover Sentinel-1 IW GRD scenes via ASF search API."""
         try:
             import asf_search as asf
@@ -76,16 +74,14 @@ class ASFProvider:
                     scene_id=props.get("sceneName", r.properties.get("fileID", "")),
                     platform=props.get("platform", "Sentinel-1"),
                     orbit_number=props.get("orbit", 0),
-                    acquisition_date=r.properties.get("startTime", "1970-01-01")[:10],  # type: ignore[arg-type]
+                    acquisition_date=r.properties.get("startTime", "1970-01-01")[:10],
                     relative_orbit=props.get("pathNumber", 0),
                     geometry=shape(r.geojson()["geometry"]),
                 )
             )
         return scenes
 
-    def _download_scenes(
-        self, scenes: list[SceneMetadata]
-    ) -> list[Path]:
+    def _download_scenes(self, scenes: list[SceneMetadata]) -> list[Path]:
         """Download SAR granules from ASF to local data directory."""
         try:
             import asf_search as asf
@@ -112,9 +108,7 @@ class ASFProvider:
 
         return list(download_dir.glob("*.zip")) + list(download_dir.glob("*.SAFE"))
 
-    def _preprocess_sar(
-        self, raster_path: Path, aoi: AOI
-    ) -> xr.Dataset:
+    def _preprocess_sar(self, raster_path: Path, aoi: AOI) -> xr.Dataset:
         """Apply radiometric calibration and terrain correction to a SAR granule.
 
         This is a simplified preprocessing pipeline. Production use may
@@ -143,9 +137,7 @@ class ASFProvider:
         )
         return ds
 
-    def load_sar(
-        self, aoi: AOI, temporal_range: TemporalRange
-    ) -> xr.Dataset:
+    def load_sar(self, aoi: AOI, temporal_range: TemporalRange) -> xr.Dataset:
         """Load and preprocess Sentinel-1 SAR data from local files."""
         scenes = self.query_scenes(aoi, temporal_range)
         if not scenes:
@@ -166,9 +158,7 @@ class ASFProvider:
 
         return xr.concat(datasets, dim="time")
 
-    def load_ancillary(
-        self, aoi: AOI, temporal_range: TemporalRange
-    ) -> xr.Dataset:
+    def load_ancillary(self, aoi: AOI, temporal_range: TemporalRange) -> xr.Dataset:
         """Load DEM and ancillary data from local sources.
 
         Downloads Copernicus DEM tiles and other ancillary datasets as needed.
@@ -194,9 +184,7 @@ class ASFProvider:
         )
         return ds
 
-    def load_full(
-        self, aoi: AOI, temporal_range: TemporalRange
-    ) -> xr.Dataset:
+    def load_full(self, aoi: AOI, temporal_range: TemporalRange) -> xr.Dataset:
         """Load SAR + ancillary data merged into a single Dataset."""
         sar = self.load_sar(aoi, temporal_range)
         ancillary = self.load_ancillary(aoi, temporal_range)

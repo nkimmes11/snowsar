@@ -87,9 +87,7 @@ class LievensAlgorithm:
         """Verify the input Dataset has required SAR and ancillary variables."""
         validate_dataset(ds)
 
-    def run(
-        self, ds: xr.Dataset, params: dict[str, Any] | None = None
-    ) -> xr.Dataset:
+    def run(self, ds: xr.Dataset, params: dict[str, Any] | None = None) -> xr.Dataset:
         """Execute the Lievens snow depth retrieval.
 
         Args:
@@ -114,9 +112,7 @@ class LievensAlgorithm:
 
         # Step 4: Apply FCF weighting (blend CR and VV signals)
         if p.fcf_weighting and "forest_cover_fraction" in ds:
-            delta_sigma = apply_fcf_weighting(
-                delta_cr, delta_vv, ds["forest_cover_fraction"]
-            )
+            delta_sigma = apply_fcf_weighting(delta_cr, delta_vv, ds["forest_cover_fraction"])
         else:
             delta_sigma = delta_cr
 
@@ -137,9 +133,10 @@ class LievensAlgorithm:
             {
                 "snow_depth": snow_depth.astype(np.float32),
                 "quality_flag": quality_flag.astype(np.uint8),
-                "uncertainty": (snow_depth.dims, np.full_like(
-                    snow_depth.values, np.nan, dtype=np.float32
-                )),
+                "uncertainty": (
+                    snow_depth.dims,
+                    np.full_like(snow_depth.values, np.nan, dtype=np.float32),
+                ),
             },
             coords=ds.coords,
             attrs={
@@ -152,9 +149,7 @@ class LievensAlgorithm:
         return result
 
 
-def compute_cross_pol_ratio(
-    gamma0_vh: xr.DataArray, gamma0_vv: xr.DataArray
-) -> xr.DataArray:
+def compute_cross_pol_ratio(gamma0_vh: xr.DataArray, gamma0_vv: xr.DataArray) -> xr.DataArray:
     """Compute cross-polarization ratio: CR = VH - VV (in dB)."""
     return gamma0_vh - gamma0_vv
 
@@ -261,13 +256,9 @@ def generate_quality_flags(
 
     # Flag high forest cover
     if "forest_cover_fraction" in ds:
-        flags = flags.where(
-            ds["forest_cover_fraction"] <= fcf_threshold, QualityFlag.HIGH_FOREST
-        )
+        flags = flags.where(ds["forest_cover_fraction"] <= fcf_threshold, QualityFlag.HIGH_FOREST)
 
     # Flag unreasonable snow depth (> 20m or < 0)
-    flags = flags.where(
-        (snow_depth >= 0) & (snow_depth <= 20.0), QualityFlag.OUTSIDE_RANGE
-    )
+    flags = flags.where((snow_depth >= 0) & (snow_depth <= 20.0), QualityFlag.OUTSIDE_RANGE)
 
     return flags

@@ -45,8 +45,13 @@ class TestSyntheticDataset:
 
     def test_required_variables_constant(self) -> None:
         expected = {
-            "gamma0_vv", "gamma0_vh", "incidence_angle",
-            "elevation", "slope", "aspect",
-            "forest_cover_fraction", "snow_cover",
+            "gamma0_vv",
+            "gamma0_vh",
+            "incidence_angle",
+            "elevation",
+            "slope",
+            "aspect",
+            "forest_cover_fraction",
+            "snow_cover",
         }
         assert expected == REQUIRED_VARIABLES

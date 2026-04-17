@@ -11,9 +11,7 @@ S1_REPEAT_CYCLE = 12
 NISAR_REPEAT_CYCLE = 12
 
 
-def sentinel1_prior_dates(
-    acquisition_date: date, max_gap_days: int = 24
-) -> list[date]:
+def sentinel1_prior_dates(acquisition_date: date, max_gap_days: int = 24) -> list[date]:
     """Return candidate prior acquisition dates for Sentinel-1 change detection.
 
     The Lievens algorithm compares each acquisition to a prior one from the

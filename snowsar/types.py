@@ -65,7 +65,7 @@ class AOI:
 
     @property
     def bounds(self) -> tuple[float, float, float, float]:
-        return self.geometry.bounds  # type: ignore[return-value]
+        return self.geometry.bounds
 
 
 @dataclass(frozen=True)

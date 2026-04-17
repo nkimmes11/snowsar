@@ -33,11 +33,13 @@ def list_algorithms() -> list[dict[str, str]]:
     for aid in AlgorithmID:
         try:
             algo = get_algorithm(aid)
-            available.append({
-                "id": aid.value,
-                "name": algo.name,
-                "description": algo.description,
-            })
+            available.append(
+                {
+                    "id": aid.value,
+                    "name": algo.name,
+                    "description": algo.description,
+                }
+            )
         except SnowSARError:
             continue
     return available
