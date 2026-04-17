@@ -38,6 +38,9 @@ Thumbs.db
 frontend/node_modules/
 frontend/dist/
 
+# MkDocs build output
+site/
+
 # Data and models cache
 *.tif
 *.tiff
