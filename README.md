@@ -11,7 +11,7 @@ SnowSAR is an open-source web application that retrieves snow depth estimates fr
 
 - **Four retrieval algorithms** (implemented across phases):
   - Lievens empirical change-detection (Sentinel-1 C-band)
-  - ML-enhanced (XGBoost with ERA5 + WorldCover features)
+  - ML-enhanced (XGBoost with ERA5 + WorldCover features) — **experimental**, see ML status below
   - DpRSE dual-polarimetric (treeless areas)
   - L-band InSAR (NISAR; Phase 3)
 - **Cloud-agnostic data layer** — same algorithms run against GEE or locally-downloaded ASF data
@@ -84,6 +84,21 @@ uv run mypy .                                # Type check
 ```
 
 See `CLAUDE.md` for workflow requirements and the implementation plan.
+
+## ML Algorithm Status
+
+The ML-enhanced algorithm is **experimental**. The retrieval framework
+(feature assembly, model registry, algorithm wrapper) is implemented and
+tested, but **no production-trained ML model currently exists** in the
+registry. The framework supports user-supplied models and regional
+retraining via `snowsar.models.training`, but the algorithm will not
+produce usable snow depth estimates out-of-the-box until a production
+model is published.
+
+A dedicated Phase 5 in the implementation plan covers training and
+publishing a regional production model (starting with a single mountain
+range). Contributors with labeled snow depth datasets are encouraged to
+train and share their own models via Zenodo.
 
 ## Documentation
 

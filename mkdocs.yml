@@ -30,6 +30,7 @@ nav:
   - Algorithms:
       - Lievens: algorithms/lievens.md
       - DpRSE: algorithms/dprse.md
+      - ML (experimental): algorithms/ml.md
   - API Reference: api.md
   - Developer Guide: developer.md
 
