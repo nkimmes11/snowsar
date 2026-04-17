@@ -53,3 +53,7 @@ GitHub Actions: ruff (lint) + mypy (types) + pytest (tests) on every push/PR. In
 ## Branch Strategy
 
 `main` (stable releases), `develop` (integration), `feature/*` (individual features). All merges to main require passing CI and review.
+
+## Conversations with User
+1. Ensure that a brief description of each step is provided prior to performing the step. Ask for user input to proceed.
+2. Ensure that a brief description of the tests, and what they are testing, is provided prior to running the tests. Ask for user input to proceed prior to performing the tests.
