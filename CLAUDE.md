@@ -46,6 +46,7 @@ GitHub Actions: ruff (lint) + mypy (types) + pytest (tests) on every push/PR. In
 
 ## Workflow Requirements
 
+- **Follow the implementation plan in order:** The implementation plan (in the active plan file) must be followed sequentially. Any deviations from the plan — including skipping steps, reordering steps, or changing scope — require explicit user approval before proceeding.
 - **Commit after every step:** Push a git commit to the GitHub repository after completing each implementation step.
 - **Verify CI passes:** After every push, check that all GitHub Actions CI runs (lint, typecheck, test) have passed. If any fail, fix the issues before proceeding to the next step.
 - **Run locally before pushing:** Always run `uv run ruff check .`, `uv run ruff format --check .`, and `uv run pytest` locally before committing.
