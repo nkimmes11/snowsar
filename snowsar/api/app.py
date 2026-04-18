@@ -15,10 +15,12 @@ def create_app() -> FastAPI:
         openapi_url="/api/openapi.json",
     )
 
-    from snowsar.api.routes import algorithms, health, jobs
+    from snowsar.api.routes import algorithms, health, jobs, results, timeseries
 
     app.include_router(health.router, prefix="/api/v1", tags=["health"])
     app.include_router(jobs.router, prefix="/api/v1", tags=["jobs"])
     app.include_router(algorithms.router, prefix="/api/v1", tags=["algorithms"])
+    app.include_router(results.router, prefix="/api/v1", tags=["results"])
+    app.include_router(timeseries.router, prefix="/api/v1", tags=["results"])
 
     return app
