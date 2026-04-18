@@ -23,8 +23,12 @@ def get_algorithm(algorithm_id: AlgorithmID) -> SnowDepthAlgorithm:
 
         return DpRSEAlgorithm()
 
+    if algorithm_id == AlgorithmID.ML:
+        from snowsar.algorithms.ml import MLAlgorithm
+
+        return MLAlgorithm()
+
     # Phase 2+ algorithms will be added here:
-    # if algorithm_id == AlgorithmID.ML: ...
     # if algorithm_id == AlgorithmID.INSAR: ...
 
     msg = f"Algorithm not yet implemented: {algorithm_id}"

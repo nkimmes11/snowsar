@@ -16,7 +16,7 @@ class TestAlgorithmRegistry:
 
     def test_get_unimplemented_raises(self) -> None:
         with pytest.raises(SnowSARError, match="not yet implemented"):
-            get_algorithm(AlgorithmID.ML)
+            get_algorithm(AlgorithmID.INSAR)
 
     def test_list_algorithms(self) -> None:
         available = list_algorithms()

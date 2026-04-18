@@ -1,0 +1,26 @@
+{
+  "models": [
+    {
+      "name": "lievens_ml_v1",
+      "version": "0.0.0-placeholder",
+      "description": "Placeholder entry. No production model published yet — see Phase 5 of the implementation plan.",
+      "url": null,
+      "sha256": null,
+      "algorithm_family": "xgboost",
+      "features": [
+        "gamma0_vv",
+        "gamma0_vh",
+        "cross_pol_ratio",
+        "incidence_angle",
+        "elevation",
+        "slope",
+        "aspect",
+        "forest_cover_fraction",
+        "temperature_2m",
+        "land_cover_class"
+      ],
+      "region": "placeholder",
+      "experimental": true
+    }
+  ]
+}

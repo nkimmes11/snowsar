@@ -27,6 +27,10 @@ dependencies = [
     "matplotlib>=3.8",
     "plotly>=5.20",
     "dataretrieval>=1.0",
+    "scikit-learn>=1.4",
+    "xgboost>=2.0",
+    "pooch>=1.8",
+    "joblib>=1.3",
 ]
 
 [project.optional-dependencies]
@@ -83,6 +87,10 @@ module = [
     "dataretrieval.*",
     "plotly.*",
     "matplotlib.*",
+    "sklearn.*",
+    "xgboost.*",
+    "joblib.*",
+    "pooch.*",
 ]
 ignore_missing_imports = true
 

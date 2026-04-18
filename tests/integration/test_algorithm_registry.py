@@ -14,9 +14,13 @@ pytestmark = pytest.mark.integration
 
 class TestAlgorithmRegistry:
     def test_all_registered_algorithms_have_conformant_output(
-        self, integration_sar_dataset: xr.Dataset
+        self, integration_ml_dataset: xr.Dataset
     ) -> None:
-        """Every registered algorithm must produce the same output schema."""
+        """Every registered algorithm must produce the same output schema.
+
+        Uses the ML-extended dataset so all algorithms (including ML, which
+        needs temperature_2m and land_cover_class) pass input validation.
+        """
         required_vars = {"snow_depth", "quality_flag", "uncertainty"}
 
         for aid in AlgorithmID:
@@ -26,7 +30,7 @@ class TestAlgorithmRegistry:
                 # Skip algorithms not yet implemented
                 continue
 
-            result = algo.run(integration_sar_dataset)
+            result = algo.run(integration_ml_dataset)
             missing = required_vars - set(result.data_vars)
             assert not missing, f"{aid.value} missing variables: {missing}"
             assert result.attrs.get("algorithm") is not None

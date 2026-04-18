@@ -30,7 +30,18 @@ ANCILLARY_VARIABLES = frozenset(
     }
 )
 
+# Optional ancillary variables required only by the ML algorithm.
+# Kept separate from REQUIRED_VARIABLES so providers/algorithms that don't
+# need them (Lievens, DpRSE) aren't forced to supply or consume them.
+ML_ANCILLARY_VARIABLES = frozenset(
+    {
+        "temperature_2m",
+        "land_cover_class",
+    }
+)
+
 REQUIRED_VARIABLES = SAR_VARIABLES | ANCILLARY_VARIABLES
+ML_REQUIRED_VARIABLES = REQUIRED_VARIABLES | ML_ANCILLARY_VARIABLES
 
 # Standard output variable names from algorithms
 OUTPUT_VARIABLES = frozenset(

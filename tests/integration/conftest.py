@@ -87,3 +87,21 @@ def integration_sar_dataset() -> xr.Dataset:
         },
     )
     return ds
+
+
+@pytest.fixture
+def integration_ml_dataset(integration_sar_dataset: xr.Dataset) -> xr.Dataset:
+    """Integration dataset extended with ML-only ancillary variables."""
+    rng = np.random.default_rng(seed=321)
+    ds = integration_sar_dataset.copy()
+    ny, nx = ds.sizes["y"], ds.sizes["x"]
+    nt = ds.sizes["time"]
+    ds["temperature_2m"] = (
+        ("time", "y", "x"),
+        rng.uniform(250, 280, (nt, ny, nx)).astype(np.float32),
+    )
+    ds["land_cover_class"] = (
+        ("y", "x"),
+        rng.integers(10, 100, size=(ny, nx)).astype(np.uint8),
+    )
+    return ds
