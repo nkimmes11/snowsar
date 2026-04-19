@@ -36,6 +36,11 @@ def _dates_between(start: date, end: date, count: int) -> list[date]:
 class FixtureProvider:
     """Synthetic data provider used when backend=='fixture'."""
 
+    def __init__(self, **_kwargs: object) -> None:
+        # Accepts and ignores backend-specific kwargs (e.g. scale_m from the
+        # executor) so the registry can hand them to every provider uniformly.
+        pass
+
     def query_scenes(self, aoi: AOI, temporal_range: TemporalRange) -> list[SceneMetadata]:
         from shapely.geometry import box
 

@@ -7,7 +7,7 @@ ancillary datasets (Copernicus DEM, PROBA-V FCF, IMS snow cover).
 from __future__ import annotations
 
 import logging
-from datetime import date
+from datetime import UTC, date, datetime
 from typing import Any
 
 import numpy as np
@@ -33,10 +33,21 @@ def _initialize_ee(project: str | None = None) -> Any:
         else:
             ee.Initialize()
     except Exception as exc:
-        msg = (
-            "Failed to initialize Earth Engine. "
-            "Ensure you have authenticated with `earthengine authenticate`."
-        )
+        detail = str(exc)
+        if "no project" in detail.lower() or "project=" in detail.lower():
+            msg = (
+                "Earth Engine requires a Google Cloud project. Set the "
+                "SNOWSAR_GEE_PROJECT environment variable to your project ID "
+                "and restart the API server."
+            )
+        elif "authorize" in detail.lower() or "authenticate" in detail.lower():
+            msg = (
+                "Earth Engine is not authenticated on this machine. Run "
+                "`earthengine authenticate` (or `ee.Authenticate()` in Python) "
+                "and restart the API server."
+            )
+        else:
+            msg = f"Failed to initialize Earth Engine: {detail}"
         raise DataProviderError(msg) from exc
     return ee
 
@@ -48,8 +59,17 @@ class GEEProvider:
     from GEE-hosted collections.
     """
 
-    def __init__(self, project: str | None = None, **_kwargs: object) -> None:
+    def __init__(
+        self,
+        project: str | None = None,
+        scale_m: int = 100,
+        **_kwargs: object,
+    ) -> None:
         self._ee = _initialize_ee(project)
+        # sampleRectangle is capped at 262144 pixels per request; sampling at
+        # native Sentinel-1 resolution (~10 m) exceeds that for any realistic
+        # AOI. Reproject to scale_m (default 100 m) before sampling.
+        self._scale_m = scale_m
 
     def query_scenes(self, aoi: AOI, temporal_range: TemporalRange) -> list[SceneMetadata]:
         """Discover Sentinel-1 IW GRD scenes via GEE."""
@@ -71,18 +91,21 @@ class GEEProvider:
 
         info = collection.getInfo()
         scenes: list[SceneMetadata] = []
+        from shapely.geometry import shape
+
         for feature in info.get("features", []):
             props = feature["properties"]
-            from shapely.geometry import shape
-
+            ts_ms = props.get("system:time_start")
+            if isinstance(ts_ms, (int, float)):
+                acq_date = datetime.fromtimestamp(ts_ms / 1000.0, tz=UTC).date()
+            else:
+                acq_date = date(1970, 1, 1)
             scenes.append(
                 SceneMetadata(
                     scene_id=props.get("system:index", ""),
                     platform=props.get("platform_number", ""),
                     orbit_number=props.get("orbitNumber_start", 0),
-                    acquisition_date=date.fromisoformat(
-                        props.get("system:time_start", "1970-01-01")[:10]
-                    ),
+                    acquisition_date=acq_date,
                     relative_orbit=props.get("relativeOrbitNumber_start", 0),
                     geometry=shape(feature.get("geometry", {})),
                 )
@@ -124,10 +147,20 @@ class GEEProvider:
         vh_arrays: list[np.ndarray] = []
         angle_arrays: list[np.ndarray] = []
 
+        proj = ee.Projection("EPSG:4326").atScale(self._scale_m)
         for i in range(count):
-            img = ee.Image(image_list.get(i))
+            img = ee.Image(image_list.get(i)).reproject(proj)
             props = img.getInfo()["properties"]
-            acq_date = date.fromisoformat(props.get("system:time_start", "1970-01-01")[:10])
+            # GEE returns system:time_start as a millisecond epoch integer,
+            # not an ISO string — divide by 1000 for seconds.
+            ts_ms = props.get("system:time_start")
+            if ts_ms is None:
+                acq_date = date(1970, 1, 1)
+            elif isinstance(ts_ms, (int, float)):
+                acq_date = datetime.fromtimestamp(ts_ms / 1000.0, tz=UTC).date()
+            else:
+                # Defensive: fall back to string parsing if GEE ever returns ISO.
+                acq_date = date.fromisoformat(str(ts_ms)[:10])
             times.append(acq_date)
 
             # Sample at ~100m resolution
@@ -143,17 +176,20 @@ class GEEProvider:
         angle = np.stack(angle_arrays)
 
         ny, nx = vv.shape[1], vv.shape[2]
+        west, south, east, north = aoi.bounds
+        # Linear lon/lat over the AOI so GeoTIFF/NetCDF output is
+        # georeferenced; xarray/NetCDF also requires datetime64 on the time
+        # coord (Python date objects aren't serializable).
+        ys = np.linspace(south, north, ny, dtype=np.float64)
+        xs = np.linspace(west, east, nx, dtype=np.float64)
+        time64 = np.array([np.datetime64(t) for t in times], dtype="datetime64[ns]")
         ds = xr.Dataset(
             {
                 "gamma0_vv": (["time", "y", "x"], vv.astype(np.float32)),
                 "gamma0_vh": (["time", "y", "x"], vh.astype(np.float32)),
                 "incidence_angle": (["time", "y", "x"], angle.astype(np.float32)),
             },
-            coords={
-                "time": times,
-                "y": np.arange(ny),
-                "x": np.arange(nx),
-            },
+            coords={"time": time64, "y": ys, "x": xs},
             attrs={
                 "crs": aoi.crs,
                 "platform": "Sentinel-1",
@@ -168,13 +204,17 @@ class GEEProvider:
         bounds = aoi.bounds
         roi = ee.Geometry.Rectangle([bounds[0], bounds[1], bounds[2], bounds[3]])
 
-        # Copernicus DEM GLO-30
-        dem = ee.Image("COPERNICUS/DEM/GLO30").select("DEM")
+        # Copernicus DEM GLO-30 is published as an ImageCollection (one Image
+        # per tile); mosaic before use. Reproject to scale_m to stay under the
+        # sampleRectangle pixel cap and match the grid used by load_sar().
+        proj = ee.Projection("EPSG:4326").atScale(self._scale_m)
+        dem = ee.ImageCollection("COPERNICUS/DEM/GLO30").select("DEM").mosaic().reproject(proj)
         terrain = ee.Terrain.products(dem)
 
         dem_data = dem.sampleRectangle(region=roi, defaultValue=0).getInfo()
         terrain_data = (
             terrain.select(["slope", "aspect"])
+            .reproject(proj)
             .sampleRectangle(region=roi, defaultValue=0)
             .getInfo()
         )
@@ -192,6 +232,9 @@ class GEEProvider:
         # Snow cover — initialize with ones (assume snow present, mask later)
         snow = np.ones((ny, nx), dtype=np.uint8)
 
+        west, south, east, north = aoi.bounds
+        ys = np.linspace(south, north, ny, dtype=np.float64)
+        xs = np.linspace(west, east, nx, dtype=np.float64)
         ds = xr.Dataset(
             {
                 "elevation": (["y", "x"], elevation),
@@ -200,10 +243,7 @@ class GEEProvider:
                 "forest_cover_fraction": (["y", "x"], fcf),
                 "snow_cover": (["y", "x"], snow),
             },
-            coords={
-                "y": np.arange(ny),
-                "x": np.arange(nx),
-            },
+            coords={"y": ys, "x": xs},
             attrs={"crs": aoi.crs},
         )
         return ds

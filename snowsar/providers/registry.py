@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from snowsar.config import Settings
 from snowsar.exceptions import SnowSARError
 from snowsar.types import Backend
 
@@ -17,6 +18,7 @@ def get_provider(backend: Backend, **kwargs: Any) -> DataProvider:
     Args:
         backend: Which processing backend to use.
         **kwargs: Backend-specific configuration passed to the provider constructor.
+            Caller-supplied values take precedence over Settings-derived defaults.
 
     Returns:
         A DataProvider implementation.
@@ -27,6 +29,10 @@ def get_provider(backend: Backend, **kwargs: Any) -> DataProvider:
     if backend == Backend.GEE:
         from snowsar.providers.gee import GEEProvider
 
+        # Earth Engine now requires a Cloud project. Pull it from Settings
+        # (env var SNOWSAR_GEE_PROJECT) unless the caller already provided one.
+        if "project" not in kwargs:
+            kwargs["project"] = Settings().gee_project
         return GEEProvider(**kwargs)
     if backend == Backend.LOCAL:
         from snowsar.providers.asf import ASFProvider

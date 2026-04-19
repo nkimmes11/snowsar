@@ -55,6 +55,21 @@ class TestComputePairwiseStats:
         assert stats_loose.agreement_rate == pytest.approx(1.0)
         assert stats_tight.agreement_rate == pytest.approx(0.0)
 
+    def test_tolerant_to_transposed_dim_order(self, ds_a: xr.Dataset, ds_b: xr.Dataset) -> None:
+        """Regression: real jobs can end up with (time,y,x) vs (y,x,time).
+
+        xr.align overlaps coordinates but preserves each array's original
+        dim order, so .values could not be broadcast until _align() was
+        taught to transpose.
+        """
+        ds_b_transposed = ds_b.copy(deep=True)
+        ds_b_transposed["snow_depth"] = ds_b_transposed["snow_depth"].transpose("y", "x", "time")
+        stats_normal = compute_pairwise_stats(ds_a, ds_b, valid_only=False)
+        stats_trans = compute_pairwise_stats(ds_a, ds_b_transposed, valid_only=False)
+        assert stats_normal.count == stats_trans.count
+        assert stats_normal.bias == pytest.approx(stats_trans.bias, abs=1e-6)
+        assert stats_normal.rmse == pytest.approx(stats_trans.rmse, abs=1e-6)
+
 
 class TestDifferenceMap:
     def test_returns_dataarray_with_same_shape(self, ds_a: xr.Dataset, ds_b: xr.Dataset) -> None:

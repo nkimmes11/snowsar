@@ -88,7 +88,9 @@ def run_job(job_id: str, request: JobCreateRequest) -> None:
         )
         temporal_range = TemporalRange(start=request.start_date, end=request.end_date)
 
-        provider = get_provider(backend)
+        # scale_m kwarg is only consumed by the GEE provider; fixture/ASF
+        # ignore unknown kwargs via **_kwargs in their constructors.
+        provider = get_provider(backend, scale_m=request.resolution_m)
         input_ds = provider.load_full(aoi, temporal_range)
 
         outputs: dict[str, xr.Dataset] = {}

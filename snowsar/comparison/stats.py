@@ -47,6 +47,10 @@ def _align(
     if a.size == 0 or b.size == 0:
         msg = "no overlapping coordinates between the two Datasets"
         raise AlgorithmError(msg)
+    # xr.align overlaps coordinates but preserves each array's original
+    # dim ordering — force b into a's ordering so .values arrays broadcast.
+    if a.dims != b.dims:
+        b = b.transpose(*a.dims)
     return a, b
 
 
@@ -60,6 +64,8 @@ def _valid_mask(
     mask = ~(np.isnan(a_vals) | np.isnan(b_vals))
     if valid_only and "quality_flag" in ds_a and "quality_flag" in ds_b:
         qa, qb = xr.align(ds_a["quality_flag"], ds_b["quality_flag"], join="inner")
+        if qa.dims != qb.dims:
+            qb = qb.transpose(*qa.dims)
         qa_valid = qa.values == int(QualityFlag.VALID)
         qb_valid = qb.values == int(QualityFlag.VALID)
         mask &= qa_valid & qb_valid
@@ -150,6 +156,8 @@ def difference_map(
     diff = (a.astype(np.float64) - b.astype(np.float64)).astype(np.float32)
     if valid_only and "quality_flag" in ds_a and "quality_flag" in ds_b:
         qa, qb = xr.align(ds_a["quality_flag"], ds_b["quality_flag"], join="inner")
+        if qa.dims != qb.dims:
+            qb = qb.transpose(*qa.dims)
         both_valid = (qa.values == int(QualityFlag.VALID)) & (qb.values == int(QualityFlag.VALID))
         diff = diff.where(both_valid)
     diff.name = f"{variable}_diff"
