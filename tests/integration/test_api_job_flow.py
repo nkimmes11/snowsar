@@ -2,12 +2,25 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+
 import pytest
 from fastapi.testclient import TestClient
 
 from snowsar.api.app import create_app
+from snowsar.api.results_store import clear as clear_results
+from snowsar.jobs import store as job_store
 
 pytestmark = pytest.mark.integration
+
+
+@pytest.fixture(autouse=True)
+def _isolate_state() -> Iterator[None]:
+    job_store.clear()
+    clear_results()
+    yield
+    job_store.clear()
+    clear_results()
 
 
 @pytest.fixture
@@ -22,7 +35,7 @@ def job_request_body() -> dict[str, object]:
         "start_date": "2024-01-01",
         "end_date": "2024-01-31",
         "algorithms": ["lievens"],
-        "backend": "gee",
+        "backend": "fixture",
         "resolution_m": 100,
     }
 
@@ -38,14 +51,12 @@ class TestAPIJobLifecycle:
         assert response.status_code == 200
         data = response.json()
         ids = {a["id"] for a in data}
-        # Phase 1 + Step 2.1 algorithms
         assert "lievens" in ids
         assert "dprse" in ids
 
     def test_create_then_get_then_delete_job(
         self, client: TestClient, job_request_body: dict[str, object]
     ) -> None:
-        # Create
         create_resp = client.post("/api/v1/jobs", json=job_request_body)
         assert create_resp.status_code == 201
         job = create_resp.json()
@@ -53,22 +64,18 @@ class TestAPIJobLifecycle:
         assert job["status"] == "pending"
         assert job["algorithms"] == ["lievens"]
 
-        # Get
         get_resp = client.get(f"/api/v1/jobs/{job_id}")
         assert get_resp.status_code == 200
         assert get_resp.json()["job_id"] == job_id
 
-        # List includes our job
         list_resp = client.get("/api/v1/jobs")
         assert list_resp.status_code == 200
         ids = [j["job_id"] for j in list_resp.json()["jobs"]]
         assert job_id in ids
 
-        # Delete
         delete_resp = client.delete(f"/api/v1/jobs/{job_id}")
         assert delete_resp.status_code == 204
 
-        # Now 404
         get_after_delete = client.get(f"/api/v1/jobs/{job_id}")
         assert get_after_delete.status_code == 404
 
@@ -82,7 +89,7 @@ class TestAPIJobLifecycle:
             "start_date": "2024-01-01",
             "end_date": "2024-01-31",
             "algorithms": ["lievens"],
-            "backend": "gee",
+            "backend": "fixture",
             "resolution_m": 100,
         }
         response = client.post("/api/v1/jobs", json=body)

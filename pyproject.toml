@@ -96,6 +96,8 @@ module = [
     "pooch.*",
     "netCDF4.*",
     "h5py.*",
+    "celery.*",
+    "alembic.*",
 ]
 ignore_missing_imports = true
 

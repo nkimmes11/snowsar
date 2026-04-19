@@ -15,6 +15,7 @@ class Backend(Enum):
 
     GEE = auto()
     LOCAL = auto()
+    FIXTURE = auto()  # deterministic synthetic data, for dev + tests
 
 
 class AlgorithmID(Enum):

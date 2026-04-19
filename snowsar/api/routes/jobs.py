@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, BackgroundTasks, HTTPException
 
 from snowsar.api.schemas import (
     JobCreateRequest,
@@ -13,15 +13,31 @@ from snowsar.api.schemas import (
     JobResponse,
     JobStatus,
 )
+from snowsar.config import Settings
+from snowsar.jobs import store as job_store
 
 router = APIRouter()
 
-# In-memory job store (replaced by database in production)
-_jobs: dict[str, JobResponse] = {}
+
+def _enqueue(job_id: str, request: JobCreateRequest, background: BackgroundTasks) -> None:
+    """Dispatch the job to the configured execution backend."""
+    settings = Settings()
+    if settings.execution_mode == "celery":
+        # Import lazily so tests + dev don't need celery/redis running.
+        from snowsar.jobs.tasks import run_retrieval
+
+        run_retrieval.delay(job_id, request.model_dump(mode="json"))
+        return
+
+    # Default: FastAPI BackgroundTasks runs after the response is sent,
+    # in the same process. Suitable for single-worker dev/test.
+    from snowsar.jobs.executor import run_job
+
+    background.add_task(run_job, job_id, request)
 
 
 @router.post("/jobs", status_code=201)
-def create_job(request: JobCreateRequest) -> JobResponse:
+def create_job(request: JobCreateRequest, background: BackgroundTasks) -> JobResponse:
     """Submit a new snow depth retrieval job."""
     job_id = str(uuid.uuid4())
     now = datetime.now(tz=UTC)
@@ -38,33 +54,29 @@ def create_job(request: JobCreateRequest) -> JobResponse:
         backend=request.backend,
         resolution_m=request.resolution_m,
     )
-    _jobs[job_id] = job
-
-    # TODO: Enqueue Celery task here
-    # from snowsar.jobs.tasks import run_retrieval
-    # run_retrieval.delay(job_id, request.model_dump())
-
+    job_store.put(job)
+    _enqueue(job_id, request, background)
     return job
 
 
 @router.get("/jobs")
 def list_jobs() -> JobListResponse:
     """List all jobs."""
-    jobs = list(_jobs.values())
+    jobs = job_store.list_all()
     return JobListResponse(jobs=jobs, total=len(jobs))
 
 
 @router.get("/jobs/{job_id}")
 def get_job(job_id: str) -> JobResponse:
     """Get job status and details."""
-    if job_id not in _jobs:
+    job = job_store.get(job_id)
+    if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
-    return _jobs[job_id]
+    return job
 
 
 @router.delete("/jobs/{job_id}", status_code=204)
 def delete_job(job_id: str) -> None:
     """Cancel or delete a job."""
-    if job_id not in _jobs:
+    if not job_store.delete(job_id):
         raise HTTPException(status_code=404, detail="Job not found")
-    del _jobs[job_id]

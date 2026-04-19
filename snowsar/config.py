@@ -1,6 +1,7 @@
 """Application configuration via environment variables."""
 
 from pathlib import Path
+from typing import Literal
 
 from pydantic_settings import BaseSettings
 
@@ -14,8 +15,11 @@ class Settings(BaseSettings):
 
     model_config = {"env_prefix": "SNOWSAR_"}
 
-    # Database
-    database_url: str = "postgresql+psycopg://snowsar:snowsar@localhost:5432/snowsar"
+    # Job execution
+    execution_mode: Literal["sync", "celery"] = "sync"
+
+    # Database (optional; when unset, routes use in-process job_store)
+    database_url: str | None = None
 
     # Celery / Redis
     celery_broker_url: str = "redis://localhost:6379/0"

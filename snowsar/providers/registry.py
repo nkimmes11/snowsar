@@ -32,5 +32,9 @@ def get_provider(backend: Backend, **kwargs: Any) -> DataProvider:
         from snowsar.providers.asf import ASFProvider
 
         return ASFProvider(**kwargs)
+    if backend == Backend.FIXTURE:
+        from snowsar.providers.fixture import FixtureProvider
+
+        return FixtureProvider()
     msg = f"Unsupported backend: {backend}"
     raise SnowSARError(msg)
