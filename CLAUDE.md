@@ -21,6 +21,18 @@ Before running any `pytest` command — including `uv run pytest`, scoped runs l
 
 Lint, format, type-check, and git commands (`ruff`, `mypy`, `git`) do NOT require approval — run them freely.
 
+### Gate 3 — Plan completeness verification (pre-commit)
+
+Before declaring any step complete and before committing, explicitly cross-check every file AND every sub-feature listed in the plan text for that step. "Tests pass" does NOT mean the step is done — tests only verify what was implemented, not what was omitted.
+
+For each item in the plan:
+- ✅ delivered → note briefly
+- ❌ not delivered → it MUST appear in the step-complete message as an explicit omission with either (a) a justification and user approval to defer, or (b) immediate fill-in before commit. Silent omission is a workflow violation.
+
+A step-complete message that lists only what was built and not what was skipped is a Gate 3 failure. Adding `TODO` comments in place of implementation without surfacing the TODO to the user is also a Gate 3 failure.
+
+When you finish a step, post a short "Plan completeness check" section that enumerates each bullet from the plan text (files and sub-features both) and marks each ✅ or ❌. If any ❌ entries exist, do not declare the step done — ask the user how to proceed.
+
 ---
 
 ## Project Overview
@@ -68,6 +80,8 @@ GitHub Actions: ruff (lint) + mypy (types) + pytest (tests) on every push/PR. In
 ## Workflow Requirements
 
 - **Follow the implementation plan in order:** The implementation plan (in the active plan file) must be followed sequentially. Any deviations from the plan — including skipping steps, reordering steps, or changing scope — require explicit user approval before proceeding.
+- **No silent partial delivery:** If a step's plan enumerates specific files, modules, or features (e.g., "Celery tasks → worker → DB persistence"), you must either deliver all of them, or explicitly flag the gaps and get user approval before declaring the step complete. Stubbed `TODO` comments without user acknowledgement are a workflow violation. See Gate 3 above.
+- **Keep the as-built record honest:** The memory file `memory/project_status.md` is the authoritative as-built record of what has and has not been delivered. It must be updated at the end of every step to reflect reality — including any deferred scope, known gaps, or step numbering changes (e.g. inserted `1.5b`). A step is not complete until this file is accurate.
 - **Commit after every step:** Push a git commit to the GitHub repository after completing each implementation step.
 - **Verify CI passes:** After every push, check that all GitHub Actions CI runs (lint, typecheck, test) have passed. If any fail, fix the issues before proceeding to the next step.
 - **Run locally before pushing:** Always run `uv run ruff check .`, `uv run ruff format --check .`, and `uv run pytest` locally before committing.
