@@ -5,37 +5,40 @@ import type { JobResponse } from "../types";
 
 interface ResultLayerProps {
   job: JobResponse | null;
+  showDiffOverlay: boolean;
 }
 
 /**
- * Placeholder result layer component.
+ * Placeholder result layer.
  *
- * When a job completes, this displays a visual indicator on the map.
- * Full GeoTIFF raster overlay rendering will be added in Phase 2
- * (Step 2.5) using georaster-layer-for-leaflet once the backend
- * produces downloadable GeoTIFF results.
+ * GeoTIFF raster overlay rendering (georaster-layer-for-leaflet) is
+ * scheduled for a future phase once Celery workers write downloadable
+ * GeoTIFFs to shared storage rather than in-process result stores.
  */
-export function ResultLayer({ job }: ResultLayerProps) {
+export function ResultLayer({ job, showDiffOverlay }: ResultLayerProps) {
   const map = useMap();
 
   useEffect(() => {
     if (!job || job.status !== "completed") return;
 
-    const popup = L.popup()
-      .setLatLng(map.getCenter())
-      .setContent(
-        `<div style="text-align:center">
+    const content = showDiffOverlay
+      ? `<div style="text-align:center">
+          <strong>Difference overlay</strong><br/>
+          ${job.algorithms.join(", ")}<br/>
+          <em>raster overlay coming soon</em>
+        </div>`
+      : `<div style="text-align:center">
           <strong>Job Complete</strong><br/>
           ${job.algorithms.join(", ")}<br/>
-          <em>GeoTIFF overlay coming in Phase 2</em>
-        </div>`,
-      )
-      .openOn(map);
+          <em>GeoTIFF overlay coming soon</em>
+        </div>`;
+
+    const popup = L.popup().setLatLng(map.getCenter()).setContent(content).openOn(map);
 
     return () => {
       popup.remove();
     };
-  }, [job, map]);
+  }, [job, showDiffOverlay, map]);
 
   return null;
 }

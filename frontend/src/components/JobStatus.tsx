@@ -50,6 +50,26 @@ export function JobStatus({ job, error }: JobStatusProps) {
           </>
         )}
       </div>
+      {job.error_message && (
+        <pre
+          style={{
+            marginTop: 6,
+            padding: "6px 8px",
+            fontSize: 11,
+            fontFamily: "monospace",
+            background: "#fef2f2",
+            border: "1px solid #fecaca",
+            borderRadius: 4,
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
+            maxHeight: 180,
+            overflowY: "auto",
+            color: "#7f1d1d",
+          }}
+        >
+          {job.error_message}
+        </pre>
+      )}
     </div>
   );
 }
