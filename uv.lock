@@ -767,19 +767,6 @@ wheels = [
 ]
 
 [[package]]
-name = "dataretrieval"
-version = "1.1.3"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "pandas" },
-    { name = "requests" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/8e/9f/1cbffe7aca147fb149213c86922c73de2945034429340489cb12ac5ae387/dataretrieval-1.1.3.tar.gz", hash = "sha256:378507e884c044d2ef0d08bb62904db9c49fd00028ba033537b9e9ec0143abc6", size = 4228239, upload-time = "2026-04-09T23:09:24.106Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/68/4d/6435a354dcfa8949811cf7553e6a239132dad4e3ebbc7dc42c0864101444/dataretrieval-1.1.3-py3-none-any.whl", hash = "sha256:19cd03d10ff4b955ec4917e3a709cae7178f1c5e71c16c39781f59a88888b0fb", size = 66622, upload-time = "2026-04-09T23:09:22.711Z" },
-]
-
-[[package]]
 name = "dateparser"
 version = "1.4.0"
 source = { registry = "https://pypi.org/simple" }
@@ -3332,7 +3319,6 @@ dependencies = [
     { name = "asf-search" },
     { name = "celery", extra = ["redis"] },
     { name = "dask" },
-    { name = "dataretrieval" },
     { name = "earthengine-api" },
     { name = "fastapi" },
     { name = "geopandas" },
@@ -3382,7 +3368,6 @@ requires-dist = [
     { name = "asf-search", specifier = ">=7.0" },
     { name = "celery", extras = ["redis"], specifier = ">=5.4" },
     { name = "dask", specifier = ">=2024.1" },
-    { name = "dataretrieval", specifier = ">=1.0" },
     { name = "earthengine-api", specifier = ">=1.0" },
     { name = "fastapi", specifier = ">=0.110" },
     { name = "geopandas", specifier = ">=1.0" },

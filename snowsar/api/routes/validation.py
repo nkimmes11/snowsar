@@ -90,10 +90,20 @@ def _run_station_validation(
             "observations_found": len(observations),
         }
 
-    arr = ds["snow_depth"].values
+    # Use dim-labeled indexing so dim order in the result Dataset doesn't
+    # matter. xarray broadcasts during algorithm execution can permute the
+    # underlying ndarray (e.g. Lievens output surfaces as (y, x, time));
+    # .isel() binds by name and is robust to those permutations.
+    da = ds["snow_depth"]
     predicted = np.array(
         [
-            float(arr[int(r.matched_time_idx), int(r.nearest_y_idx), int(r.nearest_x_idx)])
+            float(
+                da.isel(
+                    time=int(r.matched_time_idx),
+                    y=int(r.nearest_y_idx),
+                    x=int(r.nearest_x_idx),
+                ).values
+            )
             for r in merged.itertuples(index=False)
         ],
         dtype=np.float64,
