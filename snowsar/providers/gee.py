@@ -1,7 +1,25 @@
 """Google Earth Engine data provider for Sentinel-1 SAR data.
 
-Uses the preprocessed COPERNICUS/S1_GRD collection and GEE-hosted
-ancillary datasets (Copernicus DEM, PROBA-V FCF, IMS snow cover).
+Uses GEE-hosted collections:
+  * ``COPERNICUS/S1_GRD`` — Sentinel-1 GRD (VV/VH/angle)
+  * ``COPERNICUS/DEM/GLO30`` — Copernicus DEM GLO-30
+  * ``COPERNICUS/Landcover/100m/Proba-V-C3/Global`` — PROBA-V forest cover
+  * ``MODIS/061/MOD10A1`` — MODIS daily snow cover (NDSI)
+
+CRS
+---
+GEE output is always EPSG:4326 under the current sampling model. The
+provider normalizes the input AOI's bounds to 4326 (via pyproj) if the
+AOI is declared in another CRS, and sets ``attrs["crs"] = "EPSG:4326"``
+unconditionally. Downstream callers that want another CRS should
+reproject the output Dataset themselves.
+
+Batching
+--------
+All pixel fetches use a single ``sampleRectangle().getInfo()`` per
+Dataset. Scene metadata (count, ids, timestamps) is fetched in one
+bundled ``ee.Dictionary().getInfo()``. Total round-trips per job:
+2 for SAR + 1 for ancillary = 3, regardless of scene count.
 """
 
 from __future__ import annotations
@@ -52,12 +70,94 @@ def _initialize_ee(project: str | None = None) -> Any:
     return ee
 
 
-class GEEProvider:
-    """DataProvider implementation using Google Earth Engine.
+# ---------------------------------------------------------------------------
+# Pure helpers (no ee dependency) — unit-testable without a live GEE session.
+# ---------------------------------------------------------------------------
 
-    Accesses Sentinel-1 GRD from COPERNICUS/S1_GRD and ancillary data
-    from GEE-hosted collections.
+
+def _ensure_4326_bounds(
+    bounds: tuple[float, float, float, float],
+    src_crs: str,
+) -> tuple[float, float, float, float]:
+    """Return AOI bounds (w, s, e, n) in EPSG:4326 regardless of the declared CRS.
+
+    If ``src_crs`` already names 4326 the bounds are returned unchanged.
+    Otherwise the four corners are transformed via pyproj and the bounding
+    envelope of the transformed corners is returned.
     """
+    normalized = (src_crs or "").upper()
+    if normalized in {"EPSG:4326", "4326", "WGS84", "EPSG:WGS84"}:
+        return bounds
+    from pyproj import Transformer
+
+    transformer = Transformer.from_crs(src_crs, "EPSG:4326", always_xy=True)
+    west, south, east, north = bounds
+    xs: list[float] = []
+    ys: list[float] = []
+    for x, y in ((west, south), (west, north), (east, south), (east, north)):
+        tx, ty = transformer.transform(x, y)
+        xs.append(tx)
+        ys.append(ty)
+    return (min(xs), min(ys), max(xs), max(ys))
+
+
+def _parse_time_ms(ts_ms: Any) -> date:
+    """Parse GEE ``system:time_start`` into a date. Tolerates ISO fallback + None."""
+    if ts_ms is None:
+        return date(1970, 1, 1)
+    if isinstance(ts_ms, (int, float)):
+        return datetime.fromtimestamp(float(ts_ms) / 1000.0, tz=UTC).date()
+    return date.fromisoformat(str(ts_ms)[:10])
+
+
+def _extract_sar_bands(
+    sample_props: dict[str, Any],
+    scene_ids: list[str],
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Pull per-scene VV/VH/angle arrays out of a ``toBands().sampleRectangle()`` payload.
+
+    GEE's ``ImageCollection.toBands()`` prefixes each band with the source
+    image's ``system:index``. If a given ``<id>_<band>`` key is absent this
+    helper falls back to the ordinal ``<i>_<band>`` pattern GEE uses when
+    indices are missing or duplicated.
+    """
+
+    def _fetch(key_id: str, i: int, band: str) -> np.ndarray:
+        primary = f"{key_id}_{band}"
+        if primary in sample_props:
+            return np.asarray(sample_props[primary], dtype=np.float32)
+        fallback = f"{i}_{band}"
+        if fallback in sample_props:
+            return np.asarray(sample_props[fallback], dtype=np.float32)
+        msg = f"toBands sample is missing band for scene {key_id!r} ({primary}/{fallback})"
+        raise KeyError(msg)
+
+    vv = np.stack([_fetch(sid, i, "VV") for i, sid in enumerate(scene_ids)])
+    vh = np.stack([_fetch(sid, i, "VH") for i, sid in enumerate(scene_ids)])
+    angle = np.stack([_fetch(sid, i, "angle") for i, sid in enumerate(scene_ids)])
+    return vv, vh, angle
+
+
+def _extract_ancillary_bands(sample_props: dict[str, Any]) -> dict[str, np.ndarray]:
+    """Pull elevation/slope/aspect/forest_cover_fraction/snow_cover out of a combined sample."""
+    return {
+        "elevation": np.asarray(sample_props["DEM"], dtype=np.float32),
+        "slope": np.asarray(sample_props["slope"], dtype=np.float32),
+        "aspect": np.asarray(sample_props["aspect"], dtype=np.float32),
+        "forest_cover_fraction": np.asarray(
+            sample_props["forest_cover_fraction"], dtype=np.float32
+        ),
+        "snow_cover": np.asarray(sample_props["snow_cover"], dtype=np.uint8),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Provider
+# ---------------------------------------------------------------------------
+
+
+class GEEProvider:
+    """DataProvider implementation using Google Earth Engine."""
 
     def __init__(
         self,
@@ -71,10 +171,12 @@ class GEEProvider:
         # AOI. Reproject to scale_m (default 100 m) before sampling.
         self._scale_m = scale_m
 
+    # -- scene discovery ----------------------------------------------------
+
     def query_scenes(self, aoi: AOI, temporal_range: TemporalRange) -> list[SceneMetadata]:
         """Discover Sentinel-1 IW GRD scenes via GEE."""
         ee = self._ee
-        bounds = aoi.bounds
+        bounds = _ensure_4326_bounds(aoi.bounds, str(aoi.crs))
         roi = ee.Geometry.Rectangle([bounds[0], bounds[1], bounds[2], bounds[3]])
 
         collection = (
@@ -112,10 +214,12 @@ class GEEProvider:
             )
         return scenes
 
+    # -- SAR ----------------------------------------------------------------
+
     def load_sar(self, aoi: AOI, temporal_range: TemporalRange) -> xr.Dataset:
-        """Load Sentinel-1 gamma0 VV/VH from GEE."""
+        """Load Sentinel-1 gamma0 VV/VH from GEE in 2 round-trips."""
         ee = self._ee
-        bounds = aoi.bounds
+        bounds = _ensure_4326_bounds(aoi.bounds, str(aoi.crs))
         roi = ee.Geometry.Rectangle([bounds[0], bounds[1], bounds[2], bounds[3]])
 
         collection = (
@@ -131,59 +235,46 @@ class GEEProvider:
             .select(["VV", "VH", "angle"])
         )
 
-        # Convert to list of images and process
-        image_list = collection.toList(collection.size())
-        count = collection.size().getInfo()
+        proj = ee.Projection("EPSG:4326").atScale(self._scale_m)
+
+        # Round-trip 1: bundle count + ids + times into one server-side dict.
+        meta = ee.Dictionary(
+            {
+                "count": collection.size(),
+                "ids": collection.aggregate_array("system:index"),
+                "times": collection.aggregate_array("system:time_start"),
+            }
+        ).getInfo()
+        count = int(meta.get("count", 0))
 
         if count == 0:
             msg = f"No Sentinel-1 scenes found for AOI {bounds} in {temporal_range}"
             raise DataProviderError(msg)
 
-        logger.info("Loading %d Sentinel-1 scenes from GEE", count)
+        scene_ids: list[str] = [str(s) for s in meta.get("ids", [])]
+        time_ms_list: list[Any] = list(meta.get("times", []))
 
-        # Build arrays from GEE — each image becomes a time step
-        times: list[date] = []
-        vv_arrays: list[np.ndarray] = []
-        vh_arrays: list[np.ndarray] = []
-        angle_arrays: list[np.ndarray] = []
+        logger.info("Loading %d Sentinel-1 scenes from GEE (batched, 2 round-trips)", count)
 
-        proj = ee.Projection("EPSG:4326").atScale(self._scale_m)
-        for i in range(count):
-            img = ee.Image(image_list.get(i)).reproject(proj)
-            props = img.getInfo()["properties"]
-            # GEE returns system:time_start as a millisecond epoch integer,
-            # not an ISO string — divide by 1000 for seconds.
-            ts_ms = props.get("system:time_start")
-            if ts_ms is None:
-                acq_date = date(1970, 1, 1)
-            elif isinstance(ts_ms, (int, float)):
-                acq_date = datetime.fromtimestamp(ts_ms / 1000.0, tz=UTC).date()
-            else:
-                # Defensive: fall back to string parsing if GEE ever returns ISO.
-                acq_date = date.fromisoformat(str(ts_ms)[:10])
-            times.append(acq_date)
+        # Reproject each image so sampleRectangle stays under the 262k-pixel cap,
+        # then stack the whole collection into one multi-band image.
+        stacked = collection.map(lambda img: img.reproject(proj)).toBands()
 
-            # Sample at ~100m resolution
-            data = img.sampleRectangle(region=roi, defaultValue=0).getInfo()
+        # Round-trip 2: a single sampleRectangle for every scene's pixels.
+        sample = stacked.sampleRectangle(region=roi, defaultValue=0).getInfo()
+        sample_props = sample["properties"]
 
-            vv_arrays.append(np.array(data["properties"]["VV"]))
-            vh_arrays.append(np.array(data["properties"]["VH"]))
-            angle_arrays.append(np.array(data["properties"]["angle"]))
-
-        # Stack into 3D arrays (time, y, x)
-        vv = np.stack(vv_arrays)
-        vh = np.stack(vh_arrays)
-        angle = np.stack(angle_arrays)
+        vv, vh, angle = _extract_sar_bands(sample_props, scene_ids)
+        times = [_parse_time_ms(t) for t in time_ms_list]
 
         ny, nx = vv.shape[1], vv.shape[2]
-        west, south, east, north = aoi.bounds
-        # Linear lon/lat over the AOI so GeoTIFF/NetCDF output is
-        # georeferenced; xarray/NetCDF also requires datetime64 on the time
-        # coord (Python date objects aren't serializable).
+        west, south, east, north = bounds
+        # Linear lon/lat over the (4326-normalized) AOI. datetime64[ns] is
+        # required by xarray/NetCDF; Python date objects aren't serializable.
         ys = np.linspace(south, north, ny, dtype=np.float64)
         xs = np.linspace(west, east, nx, dtype=np.float64)
         time64 = np.array([np.datetime64(t) for t in times], dtype="datetime64[ns]")
-        ds = xr.Dataset(
+        return xr.Dataset(
             {
                 "gamma0_vv": (["time", "y", "x"], vv.astype(np.float32)),
                 "gamma0_vh": (["time", "y", "x"], vh.astype(np.float32)),
@@ -191,67 +282,79 @@ class GEEProvider:
             },
             coords={"time": time64, "y": ys, "x": xs},
             attrs={
-                "crs": aoi.crs,
+                "crs": "EPSG:4326",
                 "platform": "Sentinel-1",
                 "source": "GEE:COPERNICUS/S1_GRD",
             },
         )
-        return ds
+
+    # -- ancillary ----------------------------------------------------------
+
+    def _build_ancillary_image(self, temporal_range: TemporalRange) -> Any:
+        """Stack DEM + slope + aspect + FCF + snow_cover into one reprojected image.
+
+        * FCF: ``COPERNICUS/Landcover/100m/Proba-V-C3/Global`` band
+          ``tree-coverfraction`` (percent 0-100) → fraction 0-1.
+        * Snow cover: ``MODIS/061/MOD10A1`` band ``NDSI_Snow_Cover`` reduced
+          by ``.max()`` across the temporal range, then thresholded at NDSI ≥ 40
+          (the standard MODIS snow-flagging convention) → binary uint8.
+        """
+        ee = self._ee
+        proj = ee.Projection("EPSG:4326").atScale(self._scale_m)
+
+        dem = ee.ImageCollection("COPERNICUS/DEM/GLO30").select("DEM").mosaic().reproject(proj)
+        terrain = ee.Terrain.products(dem).select(["slope", "aspect"]).reproject(proj)
+
+        fcf = (
+            ee.ImageCollection("COPERNICUS/Landcover/100m/Proba-V-C3/Global")
+            .select("tree-coverfraction")
+            .mosaic()
+            .divide(100.0)
+            .rename("forest_cover_fraction")
+            .reproject(proj)
+        )
+
+        snow_mask = (
+            ee.ImageCollection("MODIS/061/MOD10A1")
+            .filterDate(
+                temporal_range.start.isoformat(),
+                temporal_range.end.isoformat(),
+            )
+            .select("NDSI_Snow_Cover")
+            .max()
+            .gte(40)
+            .rename("snow_cover")
+            .reproject(proj)
+        )
+
+        return dem.addBands(terrain).addBands(fcf).addBands(snow_mask)
 
     def load_ancillary(self, aoi: AOI, temporal_range: TemporalRange) -> xr.Dataset:
-        """Load DEM, forest cover, and snow cover from GEE collections."""
+        """Load DEM + terrain + FCF + snow mask from GEE in 1 round-trip."""
         ee = self._ee
-        bounds = aoi.bounds
+        bounds = _ensure_4326_bounds(aoi.bounds, str(aoi.crs))
         roi = ee.Geometry.Rectangle([bounds[0], bounds[1], bounds[2], bounds[3]])
 
-        # Copernicus DEM GLO-30 is published as an ImageCollection (one Image
-        # per tile); mosaic before use. Reproject to scale_m to stay under the
-        # sampleRectangle pixel cap and match the grid used by load_sar().
-        proj = ee.Projection("EPSG:4326").atScale(self._scale_m)
-        dem = ee.ImageCollection("COPERNICUS/DEM/GLO30").select("DEM").mosaic().reproject(proj)
-        terrain = ee.Terrain.products(dem)
+        combined = self._build_ancillary_image(temporal_range)
+        sample = combined.sampleRectangle(region=roi, defaultValue=0).getInfo()
+        sample_props = sample["properties"]
 
-        dem_data = dem.sampleRectangle(region=roi, defaultValue=0).getInfo()
-        terrain_data = (
-            terrain.select(["slope", "aspect"])
-            .reproject(proj)
-            .sampleRectangle(region=roi, defaultValue=0)
-            .getInfo()
-        )
-
-        elevation = np.array(dem_data["properties"]["DEM"], dtype=np.float32)
-        slope = np.array(terrain_data["properties"]["slope"], dtype=np.float32)
-        aspect = np.array(terrain_data["properties"]["aspect"], dtype=np.float32)
-
-        ny, nx = elevation.shape
-
-        # Forest cover fraction — use Copernicus Global Land Cover
-        # Simplified: initialize with zeros, to be refined with actual FCF dataset
-        fcf = np.zeros((ny, nx), dtype=np.float32)
-
-        # Snow cover — initialize with ones (assume snow present, mask later)
-        snow = np.ones((ny, nx), dtype=np.uint8)
-
-        west, south, east, north = aoi.bounds
+        bands = _extract_ancillary_bands(sample_props)
+        ny, nx = bands["elevation"].shape
+        west, south, east, north = bounds
         ys = np.linspace(south, north, ny, dtype=np.float64)
         xs = np.linspace(west, east, nx, dtype=np.float64)
-        ds = xr.Dataset(
-            {
-                "elevation": (["y", "x"], elevation),
-                "slope": (["y", "x"], slope),
-                "aspect": (["y", "x"], aspect),
-                "forest_cover_fraction": (["y", "x"], fcf),
-                "snow_cover": (["y", "x"], snow),
-            },
+
+        return xr.Dataset(
+            {name: (["y", "x"], arr) for name, arr in bands.items()},
             coords={"y": ys, "x": xs},
-            attrs={"crs": aoi.crs},
+            attrs={"crs": "EPSG:4326"},
         )
-        return ds
+
+    # -- convenience --------------------------------------------------------
 
     def load_full(self, aoi: AOI, temporal_range: TemporalRange) -> xr.Dataset:
         """Load SAR + ancillary data merged into a single Dataset."""
         sar = self.load_sar(aoi, temporal_range)
         ancillary = self.load_ancillary(aoi, temporal_range)
-
-        # Broadcast ancillary (2D) across SAR time dimension
         return xr.merge([sar, ancillary])
